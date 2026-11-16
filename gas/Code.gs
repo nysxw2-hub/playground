@@ -58,6 +58,7 @@ function doPost(e) {
 }
 
 function doGet() {
+  ensureSheets_();
   const s = getSettings_();
   return json_({ ok: true, service: '金月軒訂單', accepting: s.accepting, message: s.accepting ? '' : s.pausedMessage });
 }
@@ -68,6 +69,7 @@ function createOrder_(body) {
   // 機器人陷阱欄位：真人看不到，有填就當作垃圾訂單
   if (str_(body.website)) throw userError_('REJECTED', '無法送出訂單。');
 
+  ensureSheets_();
   const settings = getSettings_();
   if (!settings.accepting) throw userError_('PAUSED', settings.pausedMessage);
 
@@ -96,7 +98,7 @@ function createOrder_(body) {
     const summary = priced.lines.map(l => l.name + '×' + l.qty).join('、');
     const qty = priced.lines.reduce((n, l) => n + l.qty, 0);
 
-    const ss = SpreadsheetApp.getActive();
+    const ss = ss_();
     const orders = ss.getSheetByName(SHEETS.orders);
     orders.getRange(orders.getLastRow() + 1, 1, 1, ORDER_HEADERS.length).setValues([[
       orderId, now, '新訂單', order.fulfillment, safe_(order.name), safe_(order.phone), safe_(order.address),
@@ -193,7 +195,7 @@ function notifyStore_(settings, r, order) {
         (order.address ? '<br>地址：' + esc_(order.address) : '') + (order.note ? '<br>備註：' + esc_(order.note) : '') + '</p>' +
         '<table border="1" cellpadding="6" style="border-collapse:collapse"><tr><th>品項</th><th>數量</th><th>小計</th></tr>' + rows +
         '<tr><td colspan="2" align="right"><b>合計</b></td><td align="right"><b>NT$ ' + r.total + '</b></td></tr></table>' +
-        '<p><a href="' + SpreadsheetApp.getActive().getUrl() + '">開啟訂單試算表</a></p>',
+        '<p><a href="' + ss_().getUrl() + '">開啟訂單試算表</a></p>',
     });
   } catch (err) {
     console.error('通知信寄送失敗', err);
@@ -224,7 +226,7 @@ function onEdit(e) {
 }
 
 function setup() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   ss.setSpreadsheetTimeZone(TZ);
 
   const orders = sheet_(ss, SHEETS.orders, ORDER_HEADERS);
@@ -252,7 +254,7 @@ function setup() {
   if (settings.getLastRow() < 2) {
     settings.getRange(2, 1, 3, 3).setValues([
       ['接單中', true, '取消勾選即暫停網站接單'],
-      ['通知信箱', Session.getEffectiveUser().getEmail(), '新訂單通知寄到這裡；多個信箱用逗號分隔，留空則不寄'],
+      ['通知信箱', ownerEmail_(), '新訂單通知寄到這裡；多個信箱用逗號分隔，留空則不寄'],
       ['暫停接單訊息', '目前暫停線上接單，請稍後再試或來電訂購。', '暫停接單時顯示給顧客'],
     ]);
     settings.getRange('B2').insertCheckboxes();
@@ -264,10 +266,11 @@ function setup() {
   daily.getRange('C:C').setNumberFormat('"NT$ "#,##0');
   daily.setColumnWidth(8, 360);
 
-  const first = ss.getSheets()[0];
-  if (first.getName() !== SHEETS.orders && first.getLastRow() === 0) ss.deleteSheet(first);
-  ss.setActiveSheet(orders);
-  ss.toast('工作表已就緒', '金月軒', 5);
+  ss.getSheets().forEach(sh => { if (Object.values(SHEETS).indexOf(sh.getName()) < 0 && sh.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sh); });
+  try { ss.setActiveSheet(orders); } catch (e) { /* 網頁應用程式執行時沒有畫面 */ }
+  console.log('工作表已就緒：' + ss.getUrl());
+  toast_('工作表已就緒', 5);
+  return ss.getUrl();
 }
 
 /* ───────────── 每日統計 ───────────── */
@@ -279,11 +282,11 @@ function dailyReportTrigger() { const r = buildDailyReport_(new Date()); emailDa
 function installDailyTrigger() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'dailyReportTrigger').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('dailyReportTrigger').timeBased().atHour(22).everyDays(1).inTimezone(TZ).create();
-  SpreadsheetApp.getActive().toast('每晚 22:00 會自動產生統計並寄到通知信箱', '金月軒', 6);
+  toast_('每晚 22:00 會自動產生統計並寄到通知信箱', 6);
 }
 
 function buildDailyReport_(date) {
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   const key = Utilities.formatDate(date, TZ, 'yyyy/MM/dd');
   const sameDay = d => d instanceof Date && Utilities.formatDate(d, TZ, 'yyyy/MM/dd') === key;
 
@@ -312,16 +315,16 @@ function emailDailyReport_(r) {
   if (!to) return;
   MailApp.sendEmail(to, '【金月軒每日統計】' + r.date + '｜' + r.orders + ' 筆｜NT$ ' + r.revenue,
     r.date + '\n有效訂單：' + r.orders + ' 筆\n營收：NT$ ' + r.revenue + '\n取消：' + r.cancelled + ' 筆\n熱銷：' + (r.top || '—') +
-    '\n\n' + SpreadsheetApp.getActive().getUrl());
+    '\n\n' + ss_().getUrl());
 }
 
 /* ───────────── 測試工具 ───────────── */
 
 function sendTestEmail() {
   const s = getSettings_();
-  if (!s.notifyEmail) { SpreadsheetApp.getUi().alert('「設定」工作表的通知信箱是空的'); return; }
+  if (!s.notifyEmail) { console.log('「設定」工作表的通知信箱是空的'); toast_('「設定」工作表的通知信箱是空的'); return; }
   MailApp.sendEmail(s.notifyEmail, '【金月軒】通知信測試', '收到這封信代表新訂單通知設定正確。');
-  SpreadsheetApp.getActive().toast('已寄到 ' + s.notifyEmail, '金月軒', 5);
+  toast_('已寄到 ' + s.notifyEmail, 5);
 }
 
 function createTestOrder() {
@@ -329,13 +332,45 @@ function createTestOrder() {
     clientRef: 'test-' + Date.now(), fulfillment: '外帶', customerName: '測試顧客', phone: '0900000000',
     note: '這是測試訂單，可刪除', items: [{ id: 'p1', qty: 2 }, { id: 'p7', qty: 1 }],
   });
-  SpreadsheetApp.getActive().toast('已建立 ' + r.orderId + '（NT$ ' + r.total + '）', '金月軒', 6);
+  toast_('已建立 ' + r.orderId + '（NT$ ' + r.total + '）', 6);
 }
 
 /* ───────────── 小工具 ───────────── */
 
+// 找到訂單試算表：
+//  1. 程式是從試算表「擴充功能 → Apps Script」開的 → 用那份試算表
+//  2. 否則用之前記下的試算表 ID
+//  3. 都沒有 → 在雲端硬碟自動建立「金月軒訂單」並記住它
+let SS_CACHE_ = null;
+function ss_() {
+  if (SS_CACHE_) return SS_CACHE_;
+  let ss = null;
+  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) { ss = null; }
+  const props = PropertiesService.getScriptProperties();
+  if (!ss) {
+    const id = props.getProperty('SHEET_ID');
+    if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+  }
+  if (!ss) {
+    ss = SpreadsheetApp.create('金月軒訂單');
+    props.setProperty('SHEET_ID', ss.getId());
+    console.log('已建立訂單試算表：' + ss.getUrl());
+  }
+  SS_CACHE_ = ss;
+  return ss;
+}
+
+// 工作表被刪掉或從沒初始化過時自動補建
+function ensureSheets_() {
+  const ss = ss_();
+  if (!ss.getSheetByName(SHEETS.products) || !ss.getSheetByName(SHEETS.orders) || !ss.getSheetByName(SHEETS.items) || !ss.getSheetByName(SHEETS.settings)) setup();
+}
+
+function toast_(msg, sec) { try { ss_().toast(msg, '金月軒', sec || 5); } catch (e) { /* 網頁應用程式執行時沒有畫面可顯示 */ } }
+
+
 function getSettings_() {
-  const sh = SpreadsheetApp.getActive().getSheetByName(SHEETS.settings);
+  const sh = ss_().getSheetByName(SHEETS.settings);
   const map = {};
   if (sh && sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(r => { map[String(r[0]).trim()] = r[1]; });
   return {
@@ -346,7 +381,7 @@ function getSettings_() {
 }
 
 function getProducts_() {
-  const sh = SpreadsheetApp.getActive().getSheetByName(SHEETS.products);
+  const sh = ss_().getSheetByName(SHEETS.products);
   if (!sh || sh.getLastRow() < 2) throw new Error('商品工作表是空的，請先執行 setup');
   const out = {};
   sh.getRange(2, 1, sh.getLastRow() - 1, PRODUCT_HEADERS.length).getValues().forEach(r => {
@@ -365,6 +400,7 @@ function sheet_(ss, name, headers) {
   return sh;
 }
 
+function ownerEmail_() { try { return Session.getEffectiveUser().getEmail() || ''; } catch (e) { return ''; } }
 function userError_(code, message) { const e = new Error(message); e.code = code; e.userMessage = message; return e; }
 function str_(v) { return v == null ? '' : String(v).trim(); }
 // 防止「=」「+」「-」「@」開頭的內容在試算表被當成公式執行
