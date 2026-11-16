@@ -59,7 +59,7 @@ const PRODUCTS=[
 const STORES=[{name:'台北旗艦店（示範）',address:'台北市信義區信義路五段 7 號（地標示意，非門市）',phone:'02-0000-0000（示意）',hours:'每日 11:00–21:00（示意）',map:'Taipei 101'},{name:'信義概念店（示範）',address:'台北市信義區松壽路 20 號（地標示意，非門市）',phone:'02-0000-0001（示意）',hours:'每日 11:30–21:30（示意）',map:'Taipei Xinyi District'}];
 const FAQ=[['可以線上訂餐嗎？','本網站提供完整的模擬點餐體驗，包含購物車與訂單確認。正式營運前需串接訂單系統與金流，現在不會產生真實訂單。'],['冷凍鍋貼可以保存多久？','實際保存期限須以產品包裝標示為準。請依包裝指示冷凍保存，解凍後避免重複冷凍。'],['冷凍鍋貼如何料理？','平底鍋加入少許油，擺入冷凍鍋貼，倒入適量水並加蓋煎熟，最後開蓋收乾煎至底部金黃。料理時間依鍋具與產品狀態調整，務必充分加熱。'],['有提供外送或宅配嗎？','頁面上的外送平台與宅配選項均為示範；尚未串接外送或物流服務。宅配示範僅適用冷凍禮盒。'],['可以修改或取消訂單嗎？','目前訂單僅在前端模擬建立，沒有真實訂單可修改或取消。']];
 // ── 線上訂單：部署 Google Apps Script 網頁應用程式後，把「網頁應用程式網址」貼在下面（以 /exec 結尾）。留空 = 示範模式 ──
-const ORDER_API_URL='';
+const ORDER_API_URL='https://script.google.com/macros/s/AKfycbzvIs3dLy7G2pxIBe_pFDrR6CCZOKYstLZ21jBG6OHCp1J_VUQe3D1oL0ZgY2DySDwY/exec';
 const LIVE_ORDERS=/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(ORDER_API_URL);
 if(LIVE_ORDERS){FAQ[0][1]='可以。加入購物車後按「前往結帳」填寫聯絡資料即可送出，門市確認後會以電話聯繫，取餐時付款。';FAQ[4][1]='送出後如需修改或取消，請直接來電門市並提供訂單編號。'}
 const $=s=>document.querySelector(s);const money=n=>'NT$ '+n.toLocaleString('zh-TW');const icon=()=>window.lucide?.createIcons();const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
